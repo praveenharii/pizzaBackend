@@ -17,6 +17,7 @@ const VerifyToken = require("./middlewares/verifyToken");
 const jwt = require("jsonwebtoken");
 const CryptoJS = require("crypto-js");
 const encryptionKey = "erewfewfewfweferer234324143wdqere3";
+const speakeasy = require("speakeasy");
 require("dotenv").config();
 
 app.use(cors());
@@ -41,6 +42,16 @@ db.connect(err => {
     console.log("Mysql Connected")
 })
 
+function verifyMfaToken(token, secret) {
+  const isMfaValid = speakeasy.totp.verify({
+    secret: secret,
+    encoding: "base32",
+    token: token,
+    window: 0, // Set the window to 0 to only validate the current token
+  });
+
+  return isMfaValid;
+}
 
 app.post("/checkout", VerifyToken, async (req, res) => {
   let error, status;
@@ -114,37 +125,51 @@ app.post("/checkout", VerifyToken, async (req, res) => {
 
 
 app.post("/signup", async (req, res) => {
-  const { email, password } = req.body;
-   const encryptedPassword = await bcrypt.hash(password, 10);
-  db.query("SELECT * FROM users WHERE email = ?", [email], (err, results) => {
-    
-    if (err) {
-      console.log(err);
-      res.send("Error creating account");
-    } else if (results.length > 0) {
-      console.log("User already exists");
-      res.send("User already exists");
-    } else {
-      // Insert new user
-      db.query(
-        "INSERT INTO users (email, password) VALUES (?,?)",
-        [email, encryptedPassword],
-        (err, results) => {
-          if (err) {
-            console.log(err);
-            res.send("Error creating account");
-          } else {
-            console.log("Account created successfully");
-            res.send("Success");
+  const { email, password, mfaEnabled } = req.body;
+  try {
+    // Hash the password
+    const encryptedPassword = await bcrypt.hash(password, 10);
+
+    db.query("SELECT * FROM users WHERE email = ?", [email], (err, results) => {
+      if (err) {
+        console.log(err);
+        res.send("Error creating account");
+      } else if (results.length > 0) {
+        console.log("User already exists");
+        res.send("User already exists");
+      } else {
+        const secret = speakeasy.generateSecret({ length: 20 });
+
+        db.query(
+          "INSERT INTO users (email, password, isMFAEnabled, mfaSecret) VALUES (?,?,?,?)",
+          [email, encryptedPassword, mfaEnabled, secret.base32],
+          (err, results) => {
+            if (err) {
+              console.log(err);
+              res.send("Error creating account");
+            } else {
+              console.log("Account created successfully");
+
+              // If MFA is enabled, send the user's secret key to the client for setup
+              if (mfaEnabled) {
+                res.json({ success: true, secret: secret.base32 });
+              } else {
+                res.send("Success");
+              }
+            }
           }
-        }
-      );
-    }
-  });
+        );
+      }
+    });
+  } catch (error) {
+    console.log(error);
+    res.send("Error creating account");
+  }
 });
 
-app.post("/login", (req, res) => {
-  const { email, password } = req.body;
+app.post("/login", async (req, res) => {
+  const { email, password, mfaToken } = req.body;
+  console.log(mfaToken);
 
   db.query(
     "SELECT * FROM users WHERE email = ?",
@@ -152,33 +177,47 @@ app.post("/login", (req, res) => {
     async (err, results) => {
       if (err) {
         console.log(err);
-        res.send({message:"Error fetching user"});
-      } else if (results.length === 0) {
-        // User not found
-        res.send({message:"User not found"});
-      } else {
-        // User found, check password
-        const user = results[0];
-        const match = await bcrypt.compare(password, user.password);
-        if (match) {
-           const token = jwt.sign(
-             {
-               userId: user.id,
-               email: user.email,
-             },
-             JWT_SECRET,
-             { expiresIn: "1h" } 
-           );
+        return res.status(500).json({ message: "Error fetching user" });
+      }
 
-           // Send the token to the frontend
-           res.json({ token, message: "Login successful" });
-        } else {
-          res.send({message: "Incorrect password"});
+      if (results.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // User found, check password
+      const user = results[0];
+      const match = await bcrypt.compare(password, user.password);
+
+      if (!match) {
+        return res.status(401).json({ message: "Incorrect password" });
+      }
+
+      if (user.isMFAEnabled) {
+        const isMfaValid = verifyMfaToken(mfaToken, user.mfaSecret);
+
+        if (!isMfaValid) {
+          return res.status(401).json({ message: "Invalid MFA token" });
         }
       }
+
+      const token = jwt.sign(
+        {
+          userId: user.id,
+          email: user.email,
+        },
+        JWT_SECRET,
+        { expiresIn: "1h" }
+      );
+
+      // Send the token to the frontend
+      return res.json({ token, message: "Login successful" });
     }
   );
 });
+
+
+
+
 
 // Send email function
 async function sendEmail(message) {
