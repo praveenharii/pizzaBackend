@@ -170,8 +170,7 @@ app.post("/signup", async (req, res) => {
 });
 
 app.post("/login", async (req, res) => {
-  const { email, password, mfaToken } = req.body;
-  console.log(mfaToken);
+  const { email, password, hash, otp } = req.body;
 
   db.query(
     "SELECT * FROM users WHERE email = ?",
@@ -186,7 +185,6 @@ app.post("/login", async (req, res) => {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // User found, check password
       const user = results[0];
       const match = await bcrypt.compare(password, user.password);
 
@@ -194,28 +192,35 @@ app.post("/login", async (req, res) => {
         return res.status(401).json({ message: "Incorrect password" });
       }
 
-      // if (user.isMFAEnabled) {
-      //   const isMfaValid = verifyMfaToken(mfaToken, user.mfaSecret);
+      let [hashValue, expires] = hash.split(".");
+      let now = Date.now();
+      if (now > parseInt(expires)) {
+        return res.json({ message: "OTP Expired" });
+      }
 
-      //   if (!isMfaValid) {
-      //     return res.status(401).json({ message: "Invalid MFA token" });
-      //   }
-      // }
+      let data = `${email}.${otp}.${expires}`;
+      let newCalculateHash = crypto
+        .createHmac("sha256", optSecretKey)
+        .update(data)
+        .digest("hex");
 
-      const token = jwt.sign(
-        {
-          userId: user.id,
-          email: user.email,
-        },
-        JWT_SECRET,
-        { expiresIn: "1h" }
-      );
+      if (newCalculateHash === hashValue) {
+        const token = jwt.sign(
+          {
+            userId: user.id,
+            email: user.email,
+          },
+          JWT_SECRET,
+          { expiresIn: "1h" }
+        );
+        return res.json({ token, message: "Login successful" });
+      }
 
-      // Send the token to the frontend
-      return res.json({ token, message: "Login successful" });
+      return res.status(401).json({ message: "Invalid OTP" });
     }
   );
 });
+
 
 app.post("/get-otp", async function (req, res) {
   const { email } = req.body;
