@@ -18,6 +18,8 @@ const jwt = require("jsonwebtoken");
 const CryptoJS = require("crypto-js");
 const encryptionKey = "erewfewfewfweferer234324143wdqere3";
 const speakeasy = require("speakeasy");
+const otpGenerator = require("otp-generator");
+const optSecretKey = "otp-secret-key";
 require("dotenv").config();
 
 app.use(cors());
@@ -192,13 +194,13 @@ app.post("/login", async (req, res) => {
         return res.status(401).json({ message: "Incorrect password" });
       }
 
-      if (user.isMFAEnabled) {
-        const isMfaValid = verifyMfaToken(mfaToken, user.mfaSecret);
+      // if (user.isMFAEnabled) {
+      //   const isMfaValid = verifyMfaToken(mfaToken, user.mfaSecret);
 
-        if (!isMfaValid) {
-          return res.status(401).json({ message: "Invalid MFA token" });
-        }
-      }
+      //   if (!isMfaValid) {
+      //     return res.status(401).json({ message: "Invalid MFA token" });
+      //   }
+      // }
 
       const token = jwt.sign(
         {
@@ -215,7 +217,60 @@ app.post("/login", async (req, res) => {
   );
 });
 
+app.post("/get-otp", async function (req, res) {
+  const { email } = req.body;
+  
 
+  const otp = otpGenerator.generate(4, {
+    digits: true,
+    lowerCaseAlphabets: false,
+    upperCaseAlphabets: false,
+    specialChars: false,
+  });
+  console.log(otp);
+  const ttl = 5 * 60 * 1000;
+  const expires = Date.now() + ttl;
+  const data = `${email}.${otp}.${expires}`;
+  
+  const hash = crypto
+  .createHmac("sha256", optSecretKey)
+  .update(data)
+  .digest("hex");
+  
+  const fullHash = `${hash}.${expires}`;
+  await sendEmail({
+    from: "narendran@graduate.utm.my",
+    to: email,
+    subject: "Sign IN OTP",
+    html: `<h1>Sign IN OTP is : ${otp}</h1>`,
+  });
+
+  return res.json({
+    message: "Success",
+    data: fullHash,
+  });
+});
+
+app.post("/verify-otp", async function (req, res) {
+  const { otp, hash, email } = req.body;
+  console.log(req.body);
+  let [hashValue, expires] = hash.split(".");
+  let now = Date.now();
+  if (now > parseInt(expires)) {
+    return res.json({ message: "OTP Expired" });
+  }
+
+  let data = `${email}.${otp}.${expires}`;
+  let newCalculateHash = crypto
+    .createHmac("sha256", optSecretKey)
+    .update(data)
+    .digest("hex");
+
+  if (newCalculateHash === hashValue) {
+    return res.json({ message: "Success" });
+  }
+  return res.json({ message: "Invalid OTP" });
+});
 
 
 
