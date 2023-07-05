@@ -2,24 +2,24 @@ const express = require('express')
 const bodyparser = require('body-parser')
 const mysql = require('mysql')
 const app = express()
-const PORT = 3001
+const PORT = 3001 
 const bcrypt = require("bcryptjs");
 const stripe = require("stripe")(
-  "sk_test_51NHtYKET8OWZGN7d03SmOncOkXk5g060Y2N3PlEA4jrQ2KnGvVj8XHwzMyiTr3UKyFiWn41gTohalWAeAzjNfngZ00YPhFuaHE"
+  process.env.STRIPE_SECRET_TEST
 );
 const uuid = require('uuid').v4
 const cors = require('cors')
 var nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const { log } = require('console')
-const JWT_SECRET = "asdwdawdawrweraerdfedrtewter543w532wrwe32455213rw2";
+const JWT_SECRET = process.env.JWT_SECRET;
 const VerifyToken = require("./middlewares/verifyToken");
 const jwt = require("jsonwebtoken");
 const CryptoJS = require("crypto-js");
-const encryptionKey = "erewfewfewfweferer234324143wdqere3";
+const encryptionKey = process.env.APP_ENCRYPTIONKEY;
 const speakeasy = require("speakeasy");
 const otpGenerator = require("otp-generator");
-const optSecretKey = "otp-secret-key";
+const optSecretKey = process.env.APP_OTP_SECRET_KEY;
 require("dotenv").config();
 
 app.use(cors());
