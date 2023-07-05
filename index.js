@@ -2,7 +2,7 @@ const express = require('express')
 const bodyparser = require('body-parser')
 const mysql = require('mysql')
 const app = express()
-const PORT = process.env.PORT;
+// const PORT = process.env.PORT;
 const bcrypt = require("bcryptjs");
 const stripe = require("stripe")(
   process.env.STRIPE_SECRET_TEST
@@ -12,14 +12,11 @@ const cors = require('cors')
 var nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const { log } = require('console')
-const JWT_SECRET = process.env.JWT_SECRET;
 const VerifyToken = require("./middlewares/verifyToken");
 const jwt = require("jsonwebtoken");
 const CryptoJS = require("crypto-js");
-const encryptionKey = process.env.APP_ENCRYPTIONKEY;
 const speakeasy = require("speakeasy");
 const otpGenerator = require("otp-generator");
-const optSecretKey = process.env.APP_OTP_SECRET_KEY;
 require("dotenv").config();
 
 app.use(cors());
@@ -64,7 +61,7 @@ app.post("/checkout", VerifyToken, async (req, res) => {
     const cardLast4 = token.card.last4;
     const encryptedcardLast4 = CryptoJS.AES.encrypt(
       cardLast4,
-      encryptionKey
+      process.env.APP_ENCRYPTIONKEY
     ).toString();
 
     db.query(
@@ -200,7 +197,7 @@ app.post("/login", async (req, res) => {
 
       let data = `${email}.${otp}.${expires}`;
       let newCalculateHash = crypto
-        .createHmac("sha256", optSecretKey)
+        .createHmac("sha256", process.env.APP_OTP_SECRET_KEY)
         .update(data)
         .digest("hex");
 
@@ -210,7 +207,7 @@ app.post("/login", async (req, res) => {
             userId: user.id,
             email: user.email,
           },
-          JWT_SECRET,
+          process.env.JWT_SECRET,
           { expiresIn: "1h" }
         );
         return res.json({ token, message: "Login successful" });
@@ -224,7 +221,7 @@ app.post("/login", async (req, res) => {
 
 app.post("/get-otp", async function (req, res) {
   const { email } = req.body;
-  
+  console.log(email);
 
   const otp = otpGenerator.generate(4, {
     digits: true,
@@ -238,7 +235,7 @@ app.post("/get-otp", async function (req, res) {
   const data = `${email}.${otp}.${expires}`;
   
   const hash = crypto
-  .createHmac("sha256", optSecretKey)
+  .createHmac("sha256", process.env.APP_OTP_SECRET_KEY)
   .update(data)
   .digest("hex");
   
@@ -267,7 +264,7 @@ app.post("/verify-otp", async function (req, res) {
 
   let data = `${email}.${otp}.${expires}`;
   let newCalculateHash = crypto
-    .createHmac("sha256", optSecretKey)
+    .createHmac("sha256", process.env.APP_OTP_SECRET_KEY)
     .update(data)
     .digest("hex");
 
@@ -285,7 +282,7 @@ async function sendEmail(message) {
     service: "gmail",
     auth: {
       user: "linux2156@gmail.com",
-      pass: process.env.PASSWORD,
+      pass: process.env.EMAIL_PASSWORD
     },
   });
 
@@ -344,6 +341,7 @@ app.post("/forgotPassword", async (req, res) => {
 
 
 
-app.listen(PORT, ()=> {
-    console.log('Server Is connected');
+app.listen(process.env.PORT, ()=> {
+    console.log(`Server Is connected on ${process.env.PORT}`);
+
 })
