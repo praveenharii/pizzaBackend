@@ -30,10 +30,10 @@ app.use(bodyparser.json())
 
 
 const db = mysql.createConnection({
-  user: "root",
-  host: "localhost",
-  password: "",
-  database: "nodemysql",
+  user: process.env.SQL_USER,
+  host: process.env.SQL_HOST,
+  password: process.env.SQL_PASSWORD,
+  database: process.env.SQL_DATABASE,
 });
 
 //connect to mysql
