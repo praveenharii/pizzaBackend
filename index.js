@@ -2,7 +2,7 @@ const express = require('express')
 const bodyparser = require('body-parser')
 const mysql = require('mysql')
 const app = express()
-const PORT = 3001 
+const PORT = process.env.PORT;
 const bcrypt = require("bcryptjs");
 const stripe = require("stripe")(
   process.env.STRIPE_SECRET_TEST
