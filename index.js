@@ -167,57 +167,64 @@ app.post("/signup", async (req, res) => {
 });
 
 app.post("/login", async (req, res) => {
-  const { email, password, hash, otp } = req.body;
+  try {
+    const { email, password, hash, otp } = req.body;
 
-  db.query(
-    "SELECT * FROM users WHERE email = ?",
-    [email],
-    async (err, results) => {
-      if (err) {
-        console.log(err);
-        return res.status(500).json({ message: "Error fetching user" });
-      }
+    const results = await new Promise((resolve, reject) => {
+      db.query(
+        "SELECT * FROM users WHERE email = ?",
+        [email],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
+        }
+      );
+    });
 
-      if (results.length === 0) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      const user = results[0];
-      const match = await bcrypt.compare(password, user.password);
-
-      if (!match) {
-        return res.status(401).json({ message: "Incorrect password" });
-      }
-
-      let [hashValue, expires] = hash.split(".");
-      let now = Date.now();
-      if (now > parseInt(expires)) {
-        return res.json({ message: "OTP Expired" });
-      }
-
-      let data = `${email}.${otp}.${expires}`;
-      let newCalculateHash = crypto
-        .createHmac("sha256", process.env.APP_OTP_SECRET_KEY)
-        .update(data)
-        .digest("hex");
-
-      if (newCalculateHash === hashValue) {
-        const token = jwt.sign(
-          {
-            userId: user.id,
-            email: user.email,
-          },
-          process.env.JWT_SECRET,
-          { expiresIn: "1h" }
-        );
-        return res.json({ token, message: "Login successful" });
-      }
-
-      return res.status(401).json({ message: "Invalid OTP" });
+    if (results.length === 0) {
+      return res.status(404).json({ message: "User not found" });
     }
-  );
-});
 
+    const user = results[0];
+    const match = await bcrypt.compare(password, user.password);
+
+    if (!match) {
+      return res.status(401).json({ message: "Incorrect password" });
+    }
+
+    let [hashValue, expires] = hash.split(".");
+    let now = Date.now();
+    if (now > parseInt(expires)) {
+      return res.json({ message: "OTP Expired" });
+    }
+
+    let data = `${email}.${otp}.${expires}`;
+    let newCalculateHash = crypto
+      .createHmac("sha256", process.env.APP_OTP_SECRET_KEY)
+      .update(data)
+      .digest("hex");
+
+    if (newCalculateHash === hashValue) {
+      const token = jwt.sign(
+        {
+          userId: user.id,
+          email: user.email,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "1h" }
+      );
+      return res.json({ token, message: "Login successful" });
+    }
+
+    return res.status(401).json({ message: "Invalid OTP" });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
 
 app.post("/get-otp", async function (req, res) {
   const { email } = req.body;
